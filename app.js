@@ -54,9 +54,7 @@
   }
 
   function totals() {
-    const subtotal = cart.reduce((sum, l) => sum + byId(l.id).price, 0);
-    const shipping = cart.length === 0 || subtotal >= window.FREE_SHIPPING_FROM ? 0 : window.SHIPPING;
-    return { subtotal, shipping, total: subtotal + shipping };
+    return window.CartMath.totals(cart, (id) => byId(id).price, window.SHIPPING, window.FREE_SHIPPING_FROM);
   }
 
   // ---- ui helpers ----------------------------------------------------------
@@ -163,7 +161,7 @@
             <span class="qty-n">${l.qty}</span>
             <button class="btn btn-icon" data-inc="${p.id}" aria-label="One more">+</button>
           </div>
-          <span class="line-total">${money(p.price * l.qty)}</span>
+          <span class="line-total">${money(window.CartMath.lineTotal(p.price, l.qty))}</span>
           <button class="btn btn-link" data-id="${p.id}" data-action="remove">Remove</button>
         </li>`;
       })
