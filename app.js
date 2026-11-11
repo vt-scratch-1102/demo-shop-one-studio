@@ -162,7 +162,7 @@
             <button class="btn btn-icon" data-inc="${p.id}" aria-label="One more">+</button>
           </div>
           <span class="line-total">${money(window.CartMath.lineTotal(p.price, l.qty))}</span>
-          <button class="btn btn-link" data-id="${p.id}" data-action="remove">Remove</button>
+          <button class="btn btn-link" data-remove="${p.id}">Remove</button>
         </li>`;
       })
       .join("");
