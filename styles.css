@@ -102,6 +102,7 @@ main { flex: 1; padding-bottom: 48px; outline: none; }
 .summary dd { margin: 0; font-variant-numeric: tabular-nums; }
 .summary .total { border-top: 1px solid var(--line); padding-top: 10px; font-weight: 700; }
 .summary .total dt { color: var(--ink); }
+.summary .discount dd { color: var(--accent); font-weight: 600; }
 .cart-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px; }
 
 /* forms */
@@ -113,13 +114,23 @@ main { flex: 1; padding-bottom: 48px; outline: none; }
 .error { color: var(--danger); margin: 0; min-height: 1em; font-size: 14px; }
 .auth { max-width: 400px; margin: 0 auto; }
 
+/* coupon */
+.coupon { border-top: 1px solid var(--line); padding-top: 14px; }
+.coupon-row { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.coupon-field { flex: 1 1 160px; min-width: 0; }
+.coupon-applied { margin: 0; font-weight: 600; flex: 1 1 auto; }
+
 /* empty + orders */
 .empty { background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius); padding: 40px 20px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .empty p { margin: 0 0 8px; color: var(--muted); }
 .orders { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px; }
 .order { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; }
 .order .muted { grid-column: 1; }
-.order-total { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-weight: 700; }
+.order-money { grid-column: 2; grid-row: 1 / span 2; align-self: center; text-align: right; }
+.order-total { font-weight: 700; }
+.order-discount { font-size: 13px; }
+.empty .paid-total { margin: 0; color: var(--ink); font-weight: 600; }
+.empty .paid-discount { margin: 0; }
 
 /* footer + toast */
 .footer { border-top: 1px solid var(--line); padding: 20px 0; color: var(--muted); font-size: 13px; background: var(--surface); }

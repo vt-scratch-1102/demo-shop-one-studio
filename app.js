@@ -27,10 +27,19 @@
 
   let cart = store.get("cart", []); // [{ id, qty }]
   let user = store.get("user", null); // { email, name }
+  // The coupon is stored on its own, beside the cart rather than inside it, so
+  // signing out can clear it and leave the cart alone.
+  const savedCoupon = store.get("coupon", null);
+  let coupon = savedCoupon === window.CartMath.COUPON_CODE ? savedCoupon : null;
+  let couponNotice = ""; // the status line's last phrase, e.g. "Coupon removed"
 
   function saveCart() {
     store.set("cart", cart);
     renderHeader();
+  }
+
+  function saveCoupon() {
+    store.set("coupon", coupon);
   }
 
   function addToCart(id) {
@@ -50,11 +59,19 @@
 
   function removeFromCart(id) {
     cart = cart.filter((l) => l.id !== id);
+    // Removing the last line ends the coupon as well as the cart.
+    if (cart.length === 0) clearCoupon();
     saveCart();
   }
 
+  function clearCoupon() {
+    coupon = null;
+    couponNotice = "";
+    saveCoupon();
+  }
+
   function totals() {
-    return window.CartMath.totals(cart, (id) => byId(id).price, window.SHIPPING, window.FREE_SHIPPING_FROM);
+    return window.CartMath.totals(cart, (id) => byId(id).price, window.SHIPPING, window.FREE_SHIPPING_FROM, coupon);
   }
 
   // ---- ui helpers ----------------------------------------------------------
@@ -111,7 +128,7 @@
     return `
       <section class="hero">
         <h1>Small things for a calmer desk</h1>
-        <p>Free shipping on orders over ${money(window.FREE_SHIPPING_FROM)}.</p>
+        <p>Free shipping on orders of ${money(window.FREE_SHIPPING_FROM)} or more.</p>
       </section>
       <div class="search">
         <label class="sr-only" for="search">Search products</label>
@@ -179,16 +196,101 @@
       </div>`;
   }
 
+  // The one order summary. The cart page and the checkout render the same four
+  // lines in the same order while a coupon is applied, so the two pages can
+  // never quote different totals.
+  function summaryLines(t) {
+    const discount = t.discount > 0
+      ? `
+          <div class="discount"><dt>Discount</dt><dd id="discount">${window.CartMath.COUPON_CODE} -${money(t.discount)}</dd></div>`
+      : "";
+    return `
+          <div><dt>Subtotal</dt><dd id="subtotal">${money(t.subtotal)}</dd></div>${discount}
+          <div><dt>Shipping</dt><dd id="shipping">${t.shipping === 0 ? "Free" : money(t.shipping)}</dd></div>
+          <div class="total"><dt>Total</dt><dd id="total">${money(t.total)}</dd></div>`;
+  }
+
   function summary(t) {
     return `
-      <aside class="summary" aria-label="Order summary">
+      <aside class="summary" aria-label="Order summary" aria-live="polite">
         <h2>Summary</h2>
-        <dl>
-          <div><dt>Subtotal</dt><dd id="subtotal">${money(t.subtotal)}</dd></div>
-          <div><dt>Shipping</dt><dd>${t.shipping === 0 ? "Free" : money(t.shipping)}</dd></div>
-          <div class="total"><dt>Total</dt><dd id="total">${money(t.total)}</dd></div>
-        </dl>
+        <dl id="summary-lines">${summaryLines(t)}</dl>
       </aside>`;
+  }
+
+  // The coupon area, entered and removed on the checkout page only. The cart
+  // page reflects an applied coupon in its Summary but never offers the field.
+  function couponArea() {
+    return `
+          <div id="coupon-area" class="coupon">
+            <div id="coupon-controls" class="coupon-row">${couponControls()}</div>
+            <p id="coupon-error" class="error" role="alert"></p>
+            <p id="coupon-status" class="sr-only" role="status">${esc(couponStatusText())}</p>
+          </div>`;
+  }
+
+  function couponControls() {
+    if (coupon) {
+      // Applying takes the field and the Apply button away, so no second code
+      // can be entered until the coupon is removed.
+      return `
+              <p class="coupon-applied">${window.CartMath.COUPON_CODE} applied</p>
+              <button type="button" class="btn btn-ghost" id="remove-coupon">Remove coupon</button>`;
+    }
+    return `
+              <label class="coupon-field">Coupon code<input id="coupon-code" name="coupon" type="text" autocomplete="off" autocapitalize="characters"></label>
+              <button type="button" class="btn btn-ghost" id="apply-coupon">Apply</button>`;
+  }
+
+  // The applied phrase is derived from the current totals, so a basket change
+  // rewrites it with the new saving and it never states a saving the summary
+  // has moved on from.
+  function couponStatusText() {
+    if (coupon) return window.CartMath.COUPON_CODE + " applied, -" + money(totals().discount);
+    return couponNotice;
+  }
+
+  function refreshCoupon() {
+    const controls = document.getElementById("coupon-controls");
+    if (controls) controls.innerHTML = couponControls();
+    const status = document.getElementById("coupon-status");
+    if (status) status.textContent = couponStatusText();
+  }
+
+  function refreshSummary() {
+    const lines = document.getElementById("summary-lines");
+    if (lines) lines.innerHTML = summaryLines(totals());
+    const place = document.getElementById("place-order");
+    if (place) place.textContent = "Place order · " + money(totals().total);
+  }
+
+  function applyCoupon() {
+    if (coupon) return; // one press applies one discount
+    const input = document.getElementById("coupon-code");
+    const err = document.getElementById("coupon-error");
+    const result = window.CartMath.normalizeCoupon(input ? input.value : "");
+    if (result.error) {
+      if (err) err.textContent = result.error;
+      return;
+    }
+    coupon = result.code;
+    couponNotice = "";
+    saveCoupon();
+    if (err) err.textContent = "";
+    refreshCoupon();
+    refreshSummary();
+    const remove = document.getElementById("remove-coupon");
+    if (remove) remove.focus();
+  }
+
+  function removeCoupon() {
+    coupon = null;
+    couponNotice = "Coupon removed";
+    saveCoupon();
+    refreshCoupon();
+    refreshSummary();
+    const field = document.getElementById("coupon-code");
+    if (field) field.focus();
   }
 
   function checkoutPage() {
@@ -217,14 +319,18 @@
           </div>
           <label>Card number<input name="card" inputmode="numeric" placeholder="4242 4242 4242 4242" required></label>
           <p class="muted small">This is a demo. Use any number of 16 digits; nothing is charged.</p>
+          ${couponArea()}
           <p id="form-error" class="error" role="alert"></p>
-          <button class="btn btn-primary btn-block" type="submit">Place order · ${money(t.total)}</button>
+          <button id="place-order" class="btn btn-primary btn-block" type="submit">Place order · ${money(t.total)}</button>
         </form>
         ${summary(t)}
       </div>`;
   }
 
   function placeOrder(form) {
+    const btn = form.querySelector("button[type=submit]");
+    if (btn.disabled) return; // a second press places nothing extra
+
     const data = Object.fromEntries(new FormData(form).entries());
     const err = form.querySelector("#form-error");
     const missing = ["name", "address", "city", "postcode", "card"].filter((k) => !String(data[k] || "").trim());
@@ -236,19 +342,55 @@
       err.textContent = "The card number needs 16 digits.";
       return;
     }
-    const t = totals();
+
+    // Place order uses the cart and the coupon as they are stored at the moment
+    // it is pressed, so a coupon applied in another tab is included.
+    const storedCart = store.get("cart", cart);
+    const storedCoupon = store.get("coupon", null);
+    if (storedCart.length === 0) {
+      cart = [];
+      saveCart();
+      route();
+      return;
+    }
+    const t = window.CartMath.totals(storedCart, (id) => byId(id).price, window.SHIPPING, window.FREE_SHIPPING_FROM, storedCoupon);
     const orders = store.get("orders:" + user.email, []);
     const number = "DS-" + String(Date.now()).slice(-6);
+
+    btn.disabled = true; // one press, one order
+
     orders.unshift({
       number,
       date: new Date().toISOString(),
-      lines: cart.map((l) => ({ id: l.id, qty: l.qty, price: byId(l.id).price })),
+      lines: storedCart.map((l) => ({ id: l.id, qty: l.qty, price: byId(l.id).price })),
+      subtotal: t.subtotal,
+      coupon: t.discount > 0 ? window.CartMath.COUPON_CODE : null,
+      discount: t.discount,
+      shipping: t.shipping,
       total: t.total,
     });
     store.set("orders:" + user.email, orders);
+    // The cart and the coupon are cleared only after the order has been saved.
     cart = [];
+    clearCoupon();
     saveCart();
     location.hash = "#/done/" + number;
+  }
+
+  function orderFor(number) {
+    if (!user) return null;
+    return store.get("orders:" + user.email, []).find((o) => o.number === number) || null;
+  }
+
+  // Under the order number: the coupon line when one was used, then what the
+  // shopper actually paid. Orders saved before the coupon existed have no
+  // subtotal of their own and keep listing exactly as they do today.
+  function paidLines(order) {
+    if (!order) return "";
+    const discount = order.coupon && order.discount > 0
+      ? `<p class="paid-discount">${esc(order.coupon)} -${money(order.discount)}</p>`
+      : "";
+    return `${discount}<p class="paid-total">Total paid ${money(order.total)}</p>`;
   }
 
   function donePage(number) {
@@ -256,6 +398,7 @@
       <div class="empty">
         <h1>Thank you!</h1>
         <p>Your order <strong>${esc(number)}</strong> is placed.</p>
+        ${paidLines(orderFor(number))}
         <a class="btn btn-primary" href="#/orders">See my orders</a>
       </div>`;
   }
@@ -270,14 +413,23 @@
       return `<h1>My orders</h1><div class="empty"><p>No orders yet.</p><a class="btn btn-primary" href="#/">Start shopping</a></div>`;
     }
     const items = orders
-      .map(
-        (o) => `
+      .map((o) => {
+        // Orders placed before this change carry no subtotal: they keep the
+        // listing they have today, with no coupon line and no "Total paid".
+        const saved = typeof o.subtotal === "number";
+        const discount = saved && o.discount > 0 && o.coupon
+          ? `<div class="order-discount muted">${esc(o.coupon)} -${money(o.discount)}</div>`
+          : "";
+        return `
         <li class="order">
           <div><strong>${esc(o.number)}</strong><span class="muted"> · ${new Date(o.date).toLocaleDateString()}</span></div>
           <div class="muted">${o.lines.map((l) => esc(byId(l.id).name) + " × " + l.qty).join(", ")}</div>
-          <div class="order-total">${money(o.total)}</div>
-        </li>`
-      )
+          <div class="order-money">
+            <div class="order-total">${saved ? "Total paid " + money(o.total) : money(o.total)}</div>
+            ${discount}
+          </div>
+        </li>`;
+      })
       .join("");
     return `<h1>My orders</h1><ul class="orders">${items}</ul>`;
   }
@@ -337,6 +489,8 @@
     if (page === "logout") {
       user = null;
       store.set("user", null);
+      // Signing out clears the coupon only; the cart is left as it is.
+      clearCoupon();
       toast("Signed out");
       location.hash = "#/";
       return;
@@ -363,6 +517,16 @@
     else if (t.dataset.inc) { const l = cart.find((x) => x.id === t.dataset.inc); setQty(l.id, l.qty + 1); route(); }
     else if (t.dataset.dec) { const l = cart.find((x) => x.id === t.dataset.dec); setQty(l.id, l.qty - 1); route(); }
     else if (t.dataset.remove) { removeFromCart(t.dataset.remove); route(); }
+    else if (t.id === "apply-coupon") applyCoupon();
+    else if (t.id === "remove-coupon") removeCoupon();
+  });
+
+  // Enter in the coupon field applies the code instead of submitting the form,
+  // which would place the order.
+  app.addEventListener("keydown", (e) => {
+    if (e.target.id !== "coupon-code" || e.key !== "Enter") return;
+    e.preventDefault();
+    applyCoupon();
   });
 
   // Product search: filters the shop's cards by name as the shopper types.
